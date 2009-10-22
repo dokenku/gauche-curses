@@ -1,0 +1,473 @@
+;;;
+;;; curseslib.stub
+;;;
+;;; 2009.10.22 by ken kudo
+;;;
+
+"
+#include \"curses.h\"
+"
+
+;; curs-window
+(define-type <curs-window> "ScmCursWindow*" #f "SCM_CURS_WINDOW_P" "SCM_CURS_WINDOW")
+
+
+(define-cise-stmt check-err
+  [(_ proc fname)
+   `(let* ((code :: int (,@proc)))
+      (cond ((== code ERR)
+             (Scm_Error "%s failed" ,fname))))])
+
+(define-cise-stmt with-attrs
+  [(_ w attr . form)
+   `(cond [(< ,attr 0)
+           ,@form]
+          [else
+           (begin
+             (wattron (-> ,w w) ,attr)
+             ,@form
+             (wattroff (-> ,w w) ,attr))])])
+
+(define-cise-stmt values-yx
+  [(_ proc win)
+   `(let* ((y :: int) (x :: int))
+      (,proc (-> ,win w) y x)
+      (result (Scm_Values2 (SCM_MAKE_INT y) (SCM_MAKE_INT x))))])
+
+(define-cise-stmt move-to
+  [(_ y x proc w fname . args)
+   `(let* ((now-y :: int) (now-x :: int))
+      (begin
+        (getyx (-> ,w w) now-y now-x)
+        (if (<= 0 ,y)
+            (set! now-y ,y))
+        (if (<= 0 ,x)
+            (set! now-x ,x)))
+      (check-err (,proc (-> ,w w) now-y now-x ,@args) ,fname))])
+
+;;----------------------------------------
+;; initscr
+
+(define-cproc initscr ()
+  (body <top>
+        (let* ((win :: WINDOW* (initscr)))
+          (cond ((!= win NULL)
+                 (result (Scm_MakeCursWindow win)))
+                (else
+                 (Scm_Error "initscr failed"))))))
+          
+(define-cproc endwin ()
+  (body <void>
+        (check-err (endwin) "endwin")))
+
+(define-cproc cols ()
+  (body <top>
+        (result (Scm_MakeInteger COLS))))
+
+(define-cproc lines ()
+  (body <top>
+        (result (Scm_MakeInteger LINES))))
+
+;;----------------------------------------*
+;; window
+
+(define-cproc newwin (nlines::<fixnum> ncols::<fixnum> 
+                                       begin-y::<fixnum>
+                                       begin-x::<fixnum>)
+  (body <top>
+        (let* ((w :: WINDOW* (newwin nlines ncols begin-y begin-x)))
+          (if (not w)
+              (Scm_Error "newwin failed")
+              (result (Scm_MakeCursWindow w))))))
+
+(define-cproc delwin (win::<curs-window>)
+  (body <top>
+        (result SCM_UNDEFINED)))
+
+(define-cproc mvwin (win::<curs-window> y::<fixnum>
+                                         x::<fixnum>)
+  (body <void>
+        (check-err (mvwin (-> win w) y x) "mvwin")))
+
+;;----------------------------------------
+;; getyx
+
+(define-cproc getyx (win::<curs-window>)
+  (body <top>
+        (values-yx getyx win)))
+
+(define-cproc getbegyx (win::<curs-window>)
+  (body <top>
+        (values-yx getbegyx win)))
+              
+(define-cproc getmaxyx (win::<curs-window>)
+  (body <top>
+        (values-yx getmaxyx win)))
+
+;;----------------------------------------
+;; inopts
+
+(define-cproc cbreak (bf::<boolean>)
+  (body <void>
+        (cond ((SCM_FALSEP (SCM_MAKE_BOOL bf))
+               (check-err (nocbreak) "cbreak"))
+              (else
+               (check-err (cbreak) "cbreak")))))
+
+(define-cproc echo (bf::<boolean>)
+  (body <void>
+        (cond ((SCM_FALSEP (SCM_MAKE_BOOL bf))
+               (check-err (noecho) "cbreak"))
+              (else
+               (check-err (echo) "cbreak")))))
+
+(define-cproc nodelay (win::<curs-window> bf::<boolean>)
+  (body <void>
+        (cond ((SCM_FALSEP (SCM_MAKE_BOOL bf))
+               (check-err (nodelay (-> win w) 0) "nodelay"))
+              (else
+               (check-err (nodelay (-> win w) 1) "nodelay")))))
+              
+(define-cproc keypad (win::<curs-window> bf::<boolean>)
+  (body <void>
+        (cond ((SCM_FALSEP (SCM_MAKE_BOOL bf))
+               (check-err (keypad (-> win w) 0) "nodelay"))
+              (else
+               (check-err (keypad (-> win w) 1) "nodelay")))))
+
+(define-cproc timeout (win::<curs-window> delay::<fixnum>)
+  (body <void>
+        (wtimeout (-> win w) delay)))
+
+;;----------------------------------------
+;; clear
+
+(define-cproc erase (win::<curs-window>)
+  (body <void>
+        (check-err (werase (-> win w)) "erase")))
+
+(define-cproc clear (win::<curs-window>)
+  (body <void>
+        (check-err (wclear (-> win w)) "clear")))
+
+(define-cproc clrtobot (win::<curs-window>)
+  (body <void>
+        (check-err (wclrtobot (-> win w)) "clrtobot")))
+
+(define-cproc clrtoeol (win::<curs-window>)
+  (body <void>
+        (check-err (wclrtoeol (-> win w)) "clrtoeol")))
+
+;;----------------------------------------
+;; refresh
+
+(define-cproc refresh (win::<curs-window>)
+  (body <void>
+        (check-err (wrefresh (-> win w)) "refresh")))
+
+;;----------------------------------------*
+;; deleteln
+
+(define-cproc deleteln (win::<curs-window>)
+  (body <void>
+        (check-err (wdeleteln (-> win w)) "deleteln")))
+
+(define-cproc insdelln (win::<curs-window> n::<fixnum>)
+  (body <void>
+        (check-err (winsdelln (-> win w) n) "insdelln")))
+
+(define-cproc insertln (win::<curs-window>)
+  (body <void>
+        (check-err (winsertln (-> win w)) "insertln")))
+
+;;----------------------------------------
+;; move
+
+(define-cproc move (win::<curs-window> y::<fixnum>
+                                       x::<fixnum>)
+  (body <void>
+        (check-err (wmove (-> win w) y x) "move")))
+
+;;----------------------------------------
+;; printw
+
+(define-cproc printw (win::<curs-window> str::<const-cstring>
+                                         &keyword
+                                         (y::<fixnum> -1)
+                                         (x::<fixnum> -1)
+                                         (attr::<fixnum> -1))
+  (body <void>
+        (with-attrs win
+                    attr
+                    (move-to y x mvwprintw win "printw" str))))
+
+;;----------------------------------------
+;; addch
+                                           
+(define-cproc addch (win::<curs-window> ch::<int>
+                                        &keyword
+                                        (y::<fixnum> -1)
+                                        (x::<fixnum> -1)
+                                        (attr::<fixnum> -1))
+  (body <void>
+        (with-attrs win
+                    attr
+                    (move-to y x mvwaddch win "addch" ch))))
+
+(define-cproc acs-block    () (expr <top> (Scm_MakeInteger ACS_BLOCK)))
+(define-cproc acs-board    () (expr <top> (Scm_MakeInteger ACS_BOARD)))
+(define-cproc acs-btee     () (expr <top> (Scm_MakeInteger ACS_BTEE)))
+(define-cproc acs-bullet   () (expr <top> (Scm_MakeInteger ACS_BULLET)))
+(define-cproc acs-ckboard  () (expr <top> (Scm_MakeInteger ACS_CKBOARD)))
+(define-cproc acs-darrow   () (expr <top> (Scm_MakeInteger ACS_DARROW)))
+(define-cproc acs-degree   () (expr <top> (Scm_MakeInteger ACS_DEGREE)))
+(define-cproc acs-diamond  () (expr <top> (Scm_MakeInteger ACS_DIAMOND)))
+(define-cproc acs-gequal   () (expr <top> (Scm_MakeInteger ACS_GEQUAL)))
+(define-cproc acs-hline    () (expr <top> (Scm_MakeInteger ACS_HLINE)))
+(define-cproc acs-lantern  () (expr <top> (Scm_MakeInteger ACS_LANTERN)))
+(define-cproc acs-larrow   () (expr <top> (Scm_MakeInteger ACS_LARROW)))
+(define-cproc acs-lequal   () (expr <top> (Scm_MakeInteger ACS_LEQUAL)))
+(define-cproc acs-llcorner () (expr <top> (Scm_MakeInteger ACS_LLCORNER)))
+(define-cproc acs-lrcorner () (expr <top> (Scm_MakeInteger ACS_LRCORNER)))
+(define-cproc acs-ltee     () (expr <top> (Scm_MakeInteger ACS_LTEE)))
+(define-cproc acs-nequal   () (expr <top> (Scm_MakeInteger ACS_NEQUAL)))
+(define-cproc acs-pi       () (expr <top> (Scm_MakeInteger ACS_PI)))
+(define-cproc acs-plminus  () (expr <top> (Scm_MakeInteger ACS_PLMINUS)))
+(define-cproc acs-plus     () (expr <top> (Scm_MakeInteger ACS_PLUS)))
+(define-cproc acs-rarrow   () (expr <top> (Scm_MakeInteger ACS_RARROW)))
+(define-cproc acs-rtee     () (expr <top> (Scm_MakeInteger ACS_RTEE)))
+(define-cproc acs-s1       () (expr <top> (Scm_MakeInteger ACS_S1)))
+(define-cproc acs-s3       () (expr <top> (Scm_MakeInteger ACS_S3)))
+(define-cproc acs-s7       () (expr <top> (Scm_MakeInteger ACS_S7)))
+(define-cproc acs-s9       () (expr <top> (Scm_MakeInteger ACS_S9)))
+(define-cproc acs-sterling () (expr <top> (Scm_MakeInteger ACS_STERLING)))
+(define-cproc acs-ttee     () (expr <top> (Scm_MakeInteger ACS_TTEE)))
+(define-cproc acs-uarrow   () (expr <top> (Scm_MakeInteger ACS_UARROW)))
+(define-cproc acs-ulcorner () (expr <top> (Scm_MakeInteger ACS_ULCORNER)))
+(define-cproc acs-urcorner () (expr <top> (Scm_MakeInteger ACS_URCORNER)))
+(define-cproc acs-vline    () (expr <top> (Scm_MakeInteger ACS_VLINE)))
+
+;;----------------------------------------
+;; addstr
+
+(define-cproc addstr (win::<curs-window> str::<const-cstring>
+                                         &keyword
+                                         (y::<fixnum> -1)
+                                         (x::<fixnum> -1)
+                                         (attr::<fixnum> -1))
+  (body <void>
+        (with-attrs win
+                    attr
+                    (move-to y x mvwaddstr win "addstr" str))))
+
+(define-cproc addnstr (win::<curs-window> str::<const-cstring>
+                                          n::<fixnum>
+                                          &keyword
+                                          (y::<fixnum> -1)
+                                          (x::<fixnum> -1)
+                                          (attr::<fixnum> -1))
+  (body <void>
+        (with-attrs win
+                    attr
+                    (move-to y x mvwaddnstr win "addnstr" str n))))
+
+;;----------------------------------------*
+;; border
+
+(define-cproc border (win::<curs-window> ls::<fixnum>
+                                         rs::<fixnum>
+                                         ts::<fixnum>
+                                         bs::<fixnum>
+                                         tl::<fixnum>
+                                         tr::<fixnum>
+                                         bl::<fixnum>
+                                         br::<fixnum>)
+  (body <void>
+        (check-err (wborder (-> win w) ls rs ts bs tl tr bl br) "border")))
+
+(define-cproc box (win::<curs-window> verch::<fixnum>
+                                      horch::<fixnum>)
+  (body <void>
+        (check-err (box (-> win w) verch horch) "box")))
+
+(define-cproc hline (win::<curs-window> ch::<fixnum>
+                                        n::<fixnum>
+                                        &keyword
+                                        (y::<fixnum> -1)
+                                        (x::<fixnum> -1))
+  (body <void>
+        (move-to y x mvwhline win "hline" ch n)))
+
+(define-cproc vline (win::<curs-window> ch::<fixnum>
+                                        n::<fixnum>
+                                        &keyword 
+                                        (y::<fixnum> -1) 
+                                        (x::<fixnum> -1))
+  (body <void>
+        (move-to y x mvwvline win "vline" ch n)))
+
+;;----------------------------------------
+;; getch
+
+(define-cproc getch (win::<curs-window> &keyword
+                                        (y::<fixnum> -1)
+                                        (x::<fixnum> -1))
+  (body <top>
+        (let* ((current-y :: int) (current-x :: int))
+          (begin
+            (getyx (-> win w) current-y current-x)
+            (if (<= 0 y) (set! current-y y))
+            (if (<= 0 x) (set! current-x x)))
+          (let* ((r :: int))
+            (set! r (mvwgetch (-> win w) current-y current-x))
+            (result (SCM_MAKE_INT r))))))
+
+(define-cproc key-f (n::<fixnum>)
+  (body <top>
+        (cond ((or (< n 0) (> n 63))
+               (Scm_Error "key-f :index out of range: %d" n))
+              (else
+               (result (Scm_MakeInteger (+ KEY_F0 n)))))))
+
+(define-enum KEY_DOWN)
+(define-enum KEY_UP)
+(define-enum KEY_LEFT)
+(define-enum KEY_RIGHT)
+(define-enum KEY_BACKSPACE)
+(define-enum KEY_ENTER)
+
+;;----------------------------------------
+;; getstr
+
+(define-cproc getstr (win::<curs-window> &keyword
+                                         (y::<fixnum> -1)
+                                         (x::<fixnum> -1))
+  (body <top>
+        (let* ((|buf[1024]| :: char))
+          (begin
+            (move-to y x mvwgetnstr win "getstr" buf 1023)
+            (return (SCM_MAKE_STR_COPYING buf))))))
+
+;;----------------------------------------
+;; delch
+
+(define-cproc delch (win::<curs-window> &keyword
+                                        (y::<fixnum> -1)
+                                        (x::<fixnum> -1))
+  (body <top>
+        (move-to y x mvwdelch win "delch")))
+
+;;----------------------------------------
+;; insch
+
+(define-cproc insch (win::<curs-window> ch::<fixnum>
+                                        &keyword
+                                        (y::<fixnum> -1)
+                                        (x::<fixnum> -1))
+  (body <top>
+        (move-to y x mvwinsch win "insch" ch)))
+
+;;----------------------------------------
+;; color
+
+(define-cproc start-color ()
+  (body <void>
+        (check-err (start_color) "start_color")))
+
+(define-cproc init-pair (pair::<fixnum> f::<fixnum>
+                                        b::<fixnum>)
+  (body <void>
+        (check-err (init_pair pair f b) "init_pair")))
+
+(define-cproc init-color (color::<fixnum> r::<fixnum>
+                                          g::<fixnum>
+                                          b::<fixnum>)
+  (body <void>
+        (check-err (init_color color r g b) "init_color")))
+
+(define-cproc has-colors? ()
+  (body <top>
+        (result (SCM_MAKE_BOOL (has_colors)))))
+
+(define-cproc can-change-color? ()
+  (body <top>
+        (result (SCM_MAKE_BOOL (can_change_color)))))
+
+(define-cproc color-content (color::<fixnum>)
+  (body <top>
+        (let* ((r :: short) (g :: short) (b :: short))
+          (check-err (color_content color (& r) (& g) (& b)) "color_content")
+          (result (Scm_Values3 (SCM_MAKE_INT r) (SCM_MAKE_INT g) (SCM_MAKE_INT b))))))
+
+(define-cproc pair-content (pair::<fixnum>)
+  (body <top>
+        (let* ((f :: short) (b :: short))
+          (check-err (pair_content pair (& f) (& b)) "pair_content")
+          (result (Scm_Values2 (SCM_MAKE_INT f) (SCM_MAKE_INT b))))))
+
+(define-enum COLORS)
+(define-enum COLOR_PAIRS)
+
+(define-cproc color-pair (n::<fixnum>)
+  (body <top>
+        (cond ((or (< n 0) (>= n COLOR_PAIRS))
+               (Scm_Error "COLOR_PAIR :index out of range: %d" n))
+              (else
+               (result (Scm_MakeInteger (COLOR_PAIR n)))))))
+
+(define-enum COLOR_BLACK)
+(define-enum COLOR_RED)
+(define-enum COLOR_GREEN)
+(define-enum COLOR_YELLOW)
+(define-enum COLOR_BLUE)
+(define-enum COLOR_MAGENTA)
+(define-enum COLOR_CYAN)
+(define-enum COLOR_WHITE)
+
+;;----------------------------------------
+;; attr
+
+(define-cproc attroff (win::<curs-window> attrs::<fixnum>)
+  (body <void> 
+        (check-err (wattroff (-> win w) attrs) "attroff")))
+
+(define-cproc attron (win::<curs-window> attrs::<fixnum>)
+  (body <void>
+        (check-err (wattron (-> win w) attrs) "attron")))
+
+(define-cproc attrset (win::<curs-window> attrs::<fixnum>)
+  (body <void>
+        (check-err (wattrset (-> win w) attrs) "attrset")))
+
+(define-enum A_NORMAL)
+(define-enum A_STANDOUT)
+(define-enum A_UNDERLINE)
+(define-enum A_REVERSE)
+(define-enum A_BLINK)
+(define-enum A_DIM)
+(define-enum A_BOLD)
+(define-enum A_PROTECT)
+(define-enum A_INVIS)
+(define-enum A_ALTCHARSET)
+(define-enum A_CHARTEXT)
+
+;;----------------------------------------
+;; bkgd
+
+(define-cproc bkgdset (win::<curs-window> ch::<int>)
+  (body <void>
+        (wbkgdset (-> win w) ch)))
+
+(define-cproc bkgd (win::<curs-window> ch::<int>)
+  (body <void>
+        (check-err (wbkgd (-> win w) ch) "bkgd")))
+
+(define-cproc getbkgd (win::<curs-window>)
+  (body <top>
+        (let* ((ch :: char))
+          (set! ch (getbkgd (-> win w)))
+          (result (SCM_MAKE_CHAR ch)))))
+
+;; Local variables:
+;; mode: scheme
+;; end:

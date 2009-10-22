@@ -1,0 +1,6 @@
+;; (n)curses extension for gauche
+
+;; how to install
+;; ./configure
+;; make
+;; make install
